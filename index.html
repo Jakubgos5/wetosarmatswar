@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="pl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Walka o weto</title>
+<link href="https://fonts.googleapis.com/css2?family=Alfa+Slab+One&family=Barlow+Condensed:wght@500;700&display=swap" rel="stylesheet">
+<style>
+:root{color-scheme:dark;--bg:#1a0e13;--panel:#2b1720;--ink:#f2ead8;--muted:#b9a99a;--red:#d0172f;--gold:#e0b04a;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+*{box-sizing:border-box}html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--ink);font:500 18px/1.4 'Barlow Condensed',Arial Narrow,sans-serif;display:flex;flex-direction:column;align-items:center;min-height:100vh;padding:12px}
+h1{font:400 clamp(26px,5vw,40px) 'Alfa Slab One',Georgia,serif;margin:4px 0 10px;letter-spacing:.5px}
+#wrap{position:relative;width:100%;max-width:900px;aspect-ratio:16/9;border:3px solid var(--gold);background:#000}
+canvas{width:100%;height:100%;display:block}
+#ui{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:safe center;background:rgba(20,8,12,.93);padding:14px;text-align:center;overflow:auto}
+#ui.off{display:none}
+h2{font:400 clamp(22px,4vw,34px) 'Alfa Slab One',Georgia,serif;margin:0 0 8px}
+#cards{display:flex;gap:12px;flex-wrap:wrap;justify-content:center;margin:10px 0 14px}
+.card{background:var(--panel);border:2px solid #4a2a36;padding:10px 14px;min-width:150px;cursor:pointer;color:inherit;font:inherit;text-align:left}
+.card:hover,.card:focus-visible{border-color:var(--gold);outline:none}
+.card.on{border-color:var(--red);background:#3b1c28}
+.card b{font-size:22px;display:block}.card span{color:var(--muted);font-size:16px;display:block}
+.sw{display:inline-block;width:12px;height:12px;border-radius:50%;margin-right:6px}
+button.go{background:var(--red);color:#fff;border:0;font:700 22px 'Barlow Condensed',sans-serif;padding:10px 30px;cursor:pointer}
+button.go:hover,button.go:focus-visible{background:#f02a45;outline:2px solid var(--gold)}
+.card{display:flex;gap:10px;align-items:center;padding:6px 10px}
+.av canvas{display:block;background:#1a0e13;border:1px solid #4a2a36}
+#det{width:min(560px,100%);background:var(--panel);border:2px solid #4a2a36;padding:10px 14px;margin-bottom:12px;text-align:left}
+#det h3{font:400 20px 'Alfa Slab One',Georgia,serif;margin:0 0 6px}
+.st{display:flex;align-items:center;gap:8px}.st span{width:80px}.st i{flex:1;height:8px;background:#000a}.st u{display:block;height:100%;background:var(--gold)}.st em{width:34px;font-style:normal;text-align:right}
+.mv{font-size:16px;color:var(--muted);margin-top:4px}.mv b{color:var(--ink)}
+.hint{color:var(--muted);font-size:16px;margin-top:10px;max-width:820px}
+.bill{position:relative;background:#efe6d2;color:#2a2118;width:min(440px,92%);padding:18px 22px 24px;font:500 16px/1.35 Georgia,serif;text-align:left;box-shadow:0 8px 30px #000a;margin:8px 0 14px}
+.bill h3{font:400 22px 'Alfa Slab One',Georgia,serif;margin:0 0 6px}
+.stamp{position:absolute;right:-6px;top:38%;border:5px solid var(--red);color:var(--red);font:400 34px 'Alfa Slab One',Georgia,serif;padding:2px 12px;transform:rotate(-14deg);background:#efe6d299;animation:slam .5s .3s cubic-bezier(.2,2,.4,1) both}
+@keyframes slam{from{transform:rotate(-14deg) scale(3.2);opacity:0}to{transform:rotate(-14deg) scale(1);opacity:1}}
+@media (prefers-reduced-motion:reduce){.stamp{animation:none}}
+</style></head><body>
+<h1>Walka o weto</h1>
+<div id="wrap"><canvas id="c" width="800" height="450"></canvas><div id="ui"></div></div>
+<p class="hint">A / D – ruch · W – skok · lewy przycisk myszy – cios · prawy (przytrzymaj) – blok · kółko lub K – kopniak · L – atak specjalny</p>
+<script>
+/* ===== LISTA POSTACI =====
+   Nowa postać = nowy obiekt w tej tablicy. Skopiuj jeden z poniższych i zmień wartości.
+   special.type: 'projectile' (pocisk) | 'dash' (szarża) | 'slam' (uderzenie obszarowe) */
+const CHARACTERS=[
+ {id:'wojownik',name:'Bolesław',job:'Wojownik',color:'#3b82c4',hp:100,speed:3.2,jump:12,
+  punch:{dmg:6,range:46,start:4,end:9,dur:16},kick:{dmg:10,range:62,start:8,end:13,dur:26},
+  special:{type:'projectile',name:'Fala uderzeniowa',dmg:14,cd:150,dur:30}},
+ {id:'cien',name:'Cichomir',job:'Cień',color:'#9b59d0',hp:85,speed:4.4,jump:13,
+  punch:{dmg:5,range:42,start:3,end:7,dur:12},kick:{dmg:8,range:58,start:6,end:11,dur:20},
+  special:{type:'dash',name:'Szarża w mroku',dmg:15,cd:140,dur:24}},
+ {id:'glaz',name:'Kamil',job:'Głaz',color:'#c47a2c',hp:130,speed:2.4,jump:10,
+  punch:{dmg:8,range:48,start:6,end:11,dur:22},kick:{dmg:13,range:64,start:11,end:16,dur:34},
+  special:{type:'slam',name:'Trzęsienie ziemi',dmg:20,cd:190,dur:36}},
+ {id:'kaczka',name:'Kwakisław',job:'Kaczka',color:'#f2c94c',hp:80,speed:4.2,jump:14,
+  punch:{dmg:5,range:40,start:3,end:7,dur:12},kick:{dmg:9,range:56,start:6,end:11,dur:20},
+  special:{type:'projectile',name:'Kwak dźwiękowy',dmg:12,cd:110,dur:28}},
+ {id:'wetomat',name:'Wetomir',job:'Wetomat',color:'#8a96a3',hp:125,speed:2.6,jump:10,
+  punch:{dmg:8,range:48,start:6,end:11,dur:22},kick:{dmg:12,range:62,start:10,end:15,dur:32},
+  special:{type:'slam',name:'Pieczęć weta',dmg:22,cd:200,dur:36}},
+ {id:'agent',name:'Klaus',job:'Agent Niemiec',color:'#4f6b4f',hp:100,speed:3.4,jump:12,
+  punch:{dmg:6,range:46,start:4,end:9,dur:15},kick:{dmg:10,range:62,start:8,end:13,dur:24},
+  special:{type:'dash',name:'Blitz-Zugriff',dmg:16,cd:130,dur:24}},
+ {id:'strazak',name:'Florian',job:'Strażak',color:'#e8542c',hp:125,speed:3,jump:11,
+  punch:{dmg:7,range:50,start:5,end:10,dur:19},kick:{dmg:11,range:64,start:9,end:14,dur:28},
+  special:{type:'projectile',name:'Strumień wody',dmg:9,cd:80,dur:26}},
+ {id:'ekonomista',name:'Adam',job:'Ekonomista',color:'#2f9e6b',hp:90,speed:3.2,jump:12,
+  punch:{dmg:5,range:44,start:4,end:8,dur:14},kick:{dmg:9,range:60,start:7,end:12,dur:22},
+  special:{type:'projectile',name:'Inflacja',dmg:17,cd:170,dur:30}},
+ {id:'analfabeta',name:'Zbyszek',job:'Analfabeta',color:'#8c8c8c',hp:110,speed:3.4,jump:11,
+  punch:{dmg:9,range:46,start:5,end:10,dur:18},kick:{dmg:11,range:60,start:9,end:14,dur:26},
+  special:{type:'slam',name:'Nie czytam, bije',dmg:18,cd:160,dur:34}},
+ {id:'zakonnik',name:'Benedykt',job:'Zakonnik',color:'#7a6240',hp:105,speed:3,jump:11,
+  punch:{dmg:6,range:46,start:4,end:9,dur:16},kick:{dmg:10,range:60,start:8,end:13,dur:25},
+  special:{type:'heal',name:'Modlitwa (leczy)',dmg:25,cd:260,dur:30}},
+ {id:'komunista',name:'Włodzimierz',job:'Komunista',color:'#b5121b',hp:115,speed:3,jump:11,
+  punch:{dmg:7,range:46,start:5,end:10,dur:18},kick:{dmg:11,range:62,start:9,end:14,dur:27},
+  special:{type:'dash',name:'Plan pięcioletni',dmg:18,cd:150,dur:24}},
+ {id:'anglista',name:'Wiliam',job:'Anglista',color:'#3d6fa8',hp:85,speed:3.6,jump:12,
+  punch:{dmg:5,range:42,start:4,end:8,dur:13},kick:{dmg:9,range:58,start:7,end:12,dur:21},
+  special:{type:'projectile',name:'Present Perfect',dmg:15,cd:130,dur:28}}
+];
+const STAGES=[{n:'Komisja sejmowa',lvl:.35,hp:1},{n:'Senat',lvl:.6,hp:1.25},{n:'Pałac prezydencki – Prezydent-bot',lvl:.85,hp:1.7}];
+
+const cv=document.getElementById('c'),g=cv.getContext('2d'),ui=document.getElementById('ui'),W=800,H=450,FL=380;
+const keys={};
+addEventListener('keydown',e=>{keys[e.code]=1;if(e.code.startsWith('Arrow')||e.code==='Space')e.preventDefault()});
+addEventListener('keyup',e=>keys[e.code]=0);
+/* myszka: LPM = cios (M0), kółko = kopniak (M1), PPM = blok (M2) */
+addEventListener('mousedown',e=>{if(!running)return;keys['M'+e.button]=1;e.preventDefault()});
+addEventListener('mouseup',e=>{keys['M'+e.button]=0});
+addEventListener('contextmenu',e=>{if(running)e.preventDefault()});
+addEventListener('blur',()=>{keys.M0=keys.M1=keys.M2=0});
+let sel=CHARACTERS[0],stage=0,G=null,running=false;
+const store={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
+
+function mk(ch,x,face,bot,lvl,hpm){return{ch,x,y:FL,vy:0,vx:0,face,hp:ch.hp*hpm,max:ch.hp*hpm,atk:null,t:0,hit:false,cd:0,block:false,stun:0,bot,lvl,think:0,last:{},anim:0,mv:0}}
+function menu(){
+ running=false;ui.className='';
+ ui.innerHTML='<h2>Wybierz wojownika</h2><div id="cards"></div><div id="det"></div><button class="go" id="go">Do walki</button><div class="hint">Pokonaj trzy boty z rzędu. Nagroda główna: ustawa zawetowana.</div>';
+ const box=ui.querySelector('#cards');
+ CHARACTERS.forEach(c=>{const b=document.createElement('button');b.className='card'+(c===sel?' on':'');
+  b.innerHTML=`<div class="av"></div><div><b>${c.name}${store.get('weto-'+c.id)?' ✔':''}</b><span>${c.job}</span><span>Specjalny: ${c.special.name}</span></div>`;b.querySelector('.av').appendChild(avatar(c));
+  b.onclick=()=>{sel=c;menu()};box.appendChild(b)});
+ ui.querySelector('#go').onclick=()=>{stage=0;start()};details(sel);
+}
+function avatar(c){const a=document.createElement('canvas');a.width=48;a.height=64;const x=a.getContext('2d');
+ const L=(p,q,r,s,w)=>{x.strokeStyle=c.color;x.lineWidth=w;x.lineCap='round';x.beginPath();x.moveTo(p,q);x.lineTo(r,s);x.stroke()};
+ L(20,40,17,60,6);L(28,40,31,60,6);L(24,40,24,24,11);L(24,28,13,40,5);L(24,28,35,40,5);
+ x.fillStyle='#f0c9a0';x.beginPath();x.arc(24,13,9,0,7);x.fill();x.fillStyle=c.color;x.fillRect(15,3,18,5);return a}
+function details(c){
+ const T={projectile:'Pocisk',dash:'Szarża',slam:'Uderzenie obszarowe',heal:'Leczenie'},s=c.special,ms=x=>Math.round(x/60*1000);
+ const bar=(n,v,m)=>`<div class="st"><span>${n}</span><i><u style="width:${Math.min(100,v/m*100)}%"></u></i><em>${v}</em></div>`;
+ const mv=(n,m)=>`<div class="mv"><b>${n}</b> obrażenia ${m.dmg} · zasięg ${m.range} · czas ${ms(m.dur)} ms · ok. ${(m.dmg/(m.dur/60)).toFixed(1)} obr./s</div>`;
+ document.getElementById('det').innerHTML=`<h3>${c.name} – ${c.job}</h3>`+bar('Życie',c.hp,130)+bar('Szybkość',c.speed,4.4)+bar('Skok',c.jump,14)+mv('Cios',c.punch)+mv('Kopniak',c.kick)+`<div class="mv"><b>${s.name}</b> (${T[s.type]}) ${s.type==='heal'?'leczy':'obrażenia'} ${s.dmg} · odnowienie ${(s.cd/60).toFixed(1)} s</div>`;
+}
+function start(){
+ const st=STAGES[stage],pool=CHARACTERS.filter(c=>c!==sel),list=pool.length?pool:CHARACTERS,bc=list[Math.random()*list.length|0];
+ G={p:mk(sel,200,1,0,0,1),b:mk(bc,600,-1,1,st.lvl,st.hp),proj:[],fx:[],t:0,over:0,win:0,acc:0,last:performance.now()};
+ ui.className='off';running=true;requestAnimationFrame(loop);
+}
+function startAtk(f,k){
+ if(f.atk||f.stun>0)return;const m=k==='special'?f.ch.special:f.ch[k];
+ if(k==='special'){if(f.cd>0)return;f.cd=m.cd}
+ f.atk={k,m};f.t=0;f.hit=false;
+}
+function hurt(o,f,dmg){
+ const blk=o.block&&(o.x-f.x)*o.face<0&&!o.atk;if(blk)dmg*=.2;
+ o.hp=Math.max(0,o.hp-dmg);o.stun=blk?4:14;o.atk=blk?o.atk:null;o.vx=(o.x>=f.x?1:-1)*(blk?2:6);
+ G.fx.push({x:o.x,y:o.y-60,t:12,c:blk?'#8cf':'#ffd36b'});
+}
+function tryHit(f,o,dmg,range,both){
+ if(f.hit||Math.abs(o.y-f.y)>70)return;const dx=o.x-f.x;
+ if(both?Math.abs(dx)>range:(dx*f.face<0||Math.abs(dx)>range+14))return;
+ f.hit=true;hurt(o,f,dmg);
+}
+function stepAtk(f,o){
+ const a=f.atk;if(!a)return;const m=a.m;f.t++;
+ if(a.k==='special'){
+  if(m.type==='projectile'&&f.t===10)G.proj.push({x:f.x+f.face*30,y:f.y-55,vx:f.face*7,o:f,dmg:m.dmg,c:f.ch.color});
+  if(m.type==='dash'&&f.t<18){f.x+=f.face*9;if(f.t>2)tryHit(f,o,m.dmg,40)}
+  if(m.type==='heal'&&f.t===10){f.hp=Math.min(f.max,f.hp+m.dmg);G.fx.push({x:f.x,y:f.y-60,t:20,c:'#7dffa0',big:1})}
+  if(m.type==='slam'&&f.t===14){tryHit(f,o,m.dmg,115,true);G.fx.push({x:f.x,y:f.y,t:20,c:'#ffb347',big:1})}
+ }else if(f.t>=m.start&&f.t<=m.end)tryHit(f,o,m.dmg,m.range);
+ if(f.t>m.dur)f.atk=null;
+}
+function step(f,o,inp){
+ f.cd=Math.max(0,f.cd-1);f.mv=0;
+ if(f.stun>0)f.stun--;
+ else{
+  f.block=!!inp.b&&!f.atk&&f.y>=FL;
+  if(!f.atk){
+   if(!f.block){const d=(inp.r?1:0)-(inp.l?1:0);f.x+=d*f.ch.speed;f.mv=d}
+   if(inp.j&&f.y>=FL)f.vy=-f.ch.jump;
+   if(inp.p)startAtk(f,'punch');else if(inp.k)startAtk(f,'kick');else if(inp.s)startAtk(f,'special');
+   f.face=o.x>f.x?1:-1;
+  }
+ }
+ f.x+=f.vx;f.vx*=.8;f.vy+=.7;f.y+=f.vy;if(f.y>FL){f.y=FL;f.vy=0}
+ const d=f.x-o.x;if(Math.abs(d)<26&&Math.abs(f.y-o.y)<50&&!f.atk)f.x+=(d>=0?1:-1)*1.6;
+ f.x=Math.max(30,Math.min(W-30,f.x));f.anim+=Math.abs(f.mv)*.3;
+ stepAtk(f,o);
+}
+function ai(f,o){
+ if(--f.think>0)return f.last;
+ const L=f.lvl,d=o.x-f.x,ad=Math.abs(d),inp={},r=f.ch.kick.range+8,sp=f.ch.special.type;
+ f.think=Math.round(26-L*18+Math.random()*10);
+ if(sp==='heal'&&f.cd===0&&f.hp<f.max*.55&&Math.random()<.6)inp.s=1;
+ else if(o.atk&&ad<r+40&&Math.random()<L)inp.b=1;
+ else if(ad>r){d>0?inp.r=1:inp.l=1;
+  if(f.cd===0&&Math.random()<.4&&((sp==='projectile'&&ad>200)||(sp==='dash'&&ad>110)))inp.s=1}
+ else{const x=Math.random();
+  if(x<.4)inp.p=1;else if(x<.72)inp.k=1;else if(x<.82&&f.cd===0)inp.s=1;else if(x<.92)d>0?inp.l=1:inp.r=1}
+ if(sp==='heal'&&inp.s&&f.hp>=f.max*.55)inp.s=0;
+ if(Math.random()<.04)inp.j=1;
+ f.last={l:inp.l,r:inp.r,b:inp.b};return inp;
+}
+function update(){
+ const{p,b}=G;G.t++;
+ const live=G.t>60&&!G.over;
+ const pin=live?{l:keys.KeyA,r:keys.KeyD,j:keys.KeyW,b:keys.M2,p:keys.M0,k:keys.M1||keys.KeyK,s:keys.KeyL}:{};
+ step(p,b,pin);step(b,p,live?ai(b,p):{});
+ G.proj=G.proj.filter(q=>{q.x+=q.vx;const t=q.o===p?b:p;
+  if(Math.abs(q.x-t.x)<26&&Math.abs(q.y-(t.y-50))<60){hurt(t,q.o,q.dmg);return false}
+  return q.x>-20&&q.x<W+20});
+ G.fx=G.fx.filter(e=>--e.t>0);
+ if(!G.over&&(p.hp<=0||b.hp<=0)){G.over=110;G.win=b.hp<=0}
+ if(G.over&&--G.over<=0)finish();
+}
+function finish(){
+ running=false;
+ if(G.win){stage++;if(stage>=STAGES.length)return prize();ui.className='';ui.innerHTML=`<h2>Wygrana!</h2><p>Następny rywal: ${STAGES[stage].n}</p><button class="go" id="n">Dalej</button>`;ui.querySelector('#n').onclick=start}
+ else{ui.className='';ui.innerHTML=`<h2>Przegrana</h2><p>Odpadasz na etapie: ${STAGES[stage].n}</p><button class="go" id="n">Spróbuj jeszcze raz</button><p><button class="card" id="m">Zmień postać</button></p>`;
+  ui.querySelector('#n').onclick=()=>{stage=0;start()};ui.querySelector('#m').onclick=menu}
+}
+function prize(){
+ store.set('weto-'+sel.id,'1');ui.className='';
+ ui.innerHTML=`<h2>Nagroda główna!</h2><div class="bill"><h3>Ustawa o zakazie przegrywania walk z botami</h3><div>Art. 1. Każdy, kto pokonał Komisję, Senat i Prezydenta-bota, otrzymuje tę ustawę na własność.<br>Art. 2. Ustawa wchodzi w życie z chwilą zawetowania.</div><div style="margin-top:10px;font-style:italic">Zdobywca: ${sel.name}</div><div class="stamp">ZAWETOWANA</div></div><button class="go" id="m">Wybierz kolejną postać</button>`;
+ ui.querySelector('#m').onclick=menu;
+}
+/* ===== rysowanie ===== */
+function bg(){
+ g.fillStyle='#2a1620';g.fillRect(0,0,W,H);
+ for(let x=60;x<W;x+=170){g.fillStyle='#3d2230';g.fillRect(x,40,44,FL-40);g.fillStyle='#4d2c3c';g.fillRect(x-6,34,56,12)}
+ g.fillStyle='#d0172f';g.fillRect(W/2-90,18,180,34);g.fillStyle='#e0b04a';g.font='700 20px Barlow Condensed,sans-serif';g.textAlign='center';g.fillText(STAGES[stage].n,W/2,42);
+ g.fillStyle='#cfc6b4';g.fillRect(0,FL,W,H-FL);g.fillStyle='#b5ab97';for(let x=0;x<W;x+=100)g.fillRect(x,FL,2,H-FL);
+}
+function line(a,b,c,d,w,col){g.strokeStyle=col;g.lineWidth=w;g.lineCap='round';g.beginPath();g.moveTo(a,b);g.lineTo(c,d);g.stroke()}
+function draw(f){
+ g.fillStyle='rgba(0,0,0,.3)';g.beginPath();g.ellipse(f.x,FL+4,30-(FL-f.y)/8,7,0,0,7);g.fill();
+ g.save();g.translate(f.x,f.y);g.scale(f.face,1);
+ const c=f.stun>8?'#fff':f.ch.color,w=Math.sin(f.anim)*10,a=f.atk,k=a&&a.k;
+ let ext=0;if(a){const m=a.m,pr=Math.min(1,f.t/(m.dur||30));ext=Math.sin(pr*Math.PI)}
+ line(-6,-38,-10+w,0,9,c);
+ if(k==='kick')line(6,-38,14+ext*(a.m.range-10),-34-ext*14,9,c);else line(6,-38,10-w,0,9,c);
+ line(0,-38,0,-78,16,c);
+ g.fillStyle='#f0c9a0';g.beginPath();g.arc(0,-92,12,0,7);g.fill();g.fillStyle=f.ch.color;g.fillRect(-12,-104,24,6);
+ line(0,-72,-10,-52,7,c);
+ if(k==='punch')line(0,-72,12+ext*a.m.range,-72,7,c);
+ else if(k==='special'){line(0,-72,16+ext*30,-76,7,c);if(a.m.type==='dash'){g.fillStyle=f.ch.color+'66';g.fillRect(-60,-80,50,60)}}
+ else if(f.block){line(0,-72,14,-86,7,c);g.strokeStyle='#8cf';g.lineWidth=4;g.beginPath();g.arc(8,-62,38,-1.2,1.2);g.stroke()}
+ else line(0,-72,12,-54,7,c);
+ g.restore();
+}
+function hud(){
+ [[G.p,20,1],[G.b,W-20,-1]].forEach(([f,x,s])=>{
+  const w=300,bx=s>0?x:x-w;g.fillStyle='#000a';g.fillRect(bx,58,w,16);
+  g.fillStyle=f.hp/f.max>.3?'#e0b04a':'#d0172f';const hw=w*f.hp/f.max;g.fillRect(s>0?bx:bx+w-hw,58,hw,16);
+  g.fillStyle='#f2ead8';g.font='700 18px Barlow Condensed,sans-serif';g.textAlign=s>0?'left':'right';g.fillText(f.ch.name+' – '+f.ch.job+(f.bot?' (bot)':''),x,92);
+  g.fillStyle='#000a';g.fillRect(bx,98,w,5);g.fillStyle='#6cf';g.fillRect(s>0?bx:bx+w-w*(1-f.cd/f.ch.special.cd),98,w*(1-f.cd/f.ch.special.cd),5)});
+}
+function render(){
+ bg();draw(G.p);draw(G.b);
+ G.proj.forEach(q=>{g.fillStyle=q.c;g.beginPath();g.arc(q.x,q.y,13,0,7);g.fill();g.fillStyle='#fff8';g.beginPath();g.arc(q.x,q.y,6,0,7);g.fill()});
+ G.fx.forEach(e=>{g.strokeStyle=e.c;g.lineWidth=4;g.beginPath();g.arc(e.x,e.y,(e.big?110:30)*(1-e.t/(e.big?20:12))+6,0,7);g.stroke()});
+ hud();g.textAlign='center';g.font='400 64px Alfa Slab One,Georgia,serif';
+ if(G.t<60){g.fillStyle='#f2ead8';g.fillText(G.t<35?'Gotowi?':'WALKA!',W/2,230)}
+ if(G.over){g.fillStyle=G.win?'#e0b04a':'#d0172f';g.fillText(G.win?'K.O.':'Przegrana',W/2,230)}
+}
+function loop(now){
+ if(!running)return;
+ G.acc+=Math.min(100,now-G.last);G.last=now;
+ while(G.acc>=1000/60&&running){G.acc-=1000/60;update()}
+ if(running||G)render();
+ if(running)requestAnimationFrame(loop);
+}
+menu();
+</script></body></html>
